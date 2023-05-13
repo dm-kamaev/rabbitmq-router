@@ -1,0 +1,11 @@
+{
+  "watch": [
+    "src/*/*.ts",
+    "*.ts"
+  ],
+  "ext": "js,ts,json,yaml",
+  "ignore": [
+    "src/**/*.spec.ts"
+  ],
+  "exec": "npx ts-node ./src/main.ts"
+}
