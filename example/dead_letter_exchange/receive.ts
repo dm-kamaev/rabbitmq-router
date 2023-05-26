@@ -8,15 +8,14 @@ import Router from '../../src/Router';
 
   await router.on<{ msg: string }>(
     {
-      exchange: 'ptm.retail_render.dead_letter',
+      exchange: 'order.collected.dead_letter',
       type: 'topic',
-      queue: 'q_render.dead_letter',
+      queue: 'start_delivery.dead_letter',
       routingKey: '#',
     },
     {
       prefetch: 1,
       exchange: { durable: true },
-      queue: { deadLetterExchange: 'ptm.retail_render.dead_letter' },
     },
     async function (data) {
       console.log(`[RECEIVE]: DEAD LETTER workerId ${workerId}: `, data);
@@ -25,18 +24,18 @@ import Router from '../../src/Router';
 
   await router.on<{ msg: string }>(
     {
-      exchange: 'ptm.v2_retail_render',
+      exchange: 'order.collected',
       type: 'fanout',
-      queue: 'v2_q_render',
+      queue: 'v2_start_delivery',
     },
     {
       prefetch: 1,
       manualAck: true, // you should manual acknoledgement !!!
       exchange: { durable: true },
-      queue: { deadLetterExchange: 'ptm.retail_render.dead_letter' },
+      queue: { deadLetterExchange: 'order.collected.dead_letter' },
     },
     async function (data, { ack: _ack, reject, nack: _nack }) {
-      console.log('REJECT data and send to dead letter');
+      console.log('[RECEIVE]: REJECT data and send to dead letter');
       reject(false);
 
       // OR

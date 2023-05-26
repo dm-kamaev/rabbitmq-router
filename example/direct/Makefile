@@ -1,9 +1,18 @@
+routingKey = "order.ev.collected"
 
-receive:
-	npx ts-node receive.ts
+# If you want scaling consuming message from direct exchange/queue, you can start another worker with same routing key and queue name. RabbitMQ will be send  message to consumers   (behavior like fanout)
+delivery:
+	routingKey=$(routingKey) npx ts-node delivery.ts;
+
+notification:
+	routingKey=$(routingKey) npx ts-node notification.ts;
 
 send:
-	npx ts-node send.ts
+	routingKey=$(routingKey) npx ts-node send.ts
 
 send_4:
-	npx ts-node send.ts & npx ts-node send.ts & npx ts-node send.ts & npx ts-node send.ts
+	routingKey=$(routingKey) npx ts-node send.ts & \
+	routingKey=$(routingKey) npx ts-node send.ts & \
+	routingKey=$(routingKey) npx ts-node send.ts & \
+	routingKey=$(routingKey) npx ts-node send.ts;
+

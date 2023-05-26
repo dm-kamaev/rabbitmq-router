@@ -5,13 +5,14 @@ import Router from '../../src/Router';
   const router = new Router(config);
   await router.connect();
   const workerId = process.pid;
+  const routingKey = process.env.routingKey;
 
   await router.on<{ msg: string }>(
     {
-      exchange: 'ptm.v3_retail_render',
+      exchange: 'order',
       type: 'direct',
-      routingKey: 'example',
-      queue: 'v3_q_render_1',
+      routingKey,
+      queue: 'send_notification',
     },
     {
       prefetch: 1,

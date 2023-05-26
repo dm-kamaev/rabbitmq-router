@@ -4,20 +4,22 @@ import Router from '../../src/Router';
 (async function () {
   const router = new Router(config);
   await router.connect({ confirm: true });
+  const routingKey = process.env.routingKey;
   const result = await router.publish(
     {
-      exchange: 'ptm.v3_retail_render',
+      exchange: 'order',
       type: 'direct',
-      routingKey: 'example',
+      routingKey,
     },
     {
       exchange: { durable: true },
     },
-    { message: 'I published to exchange!!! ' + Date.now() },
+    { message: `I published to exchange (direct) routingKey (${routingKey}) ${Date.now()} !!!` },
     { persistent: true }
   );
 
   console.log('RESULT ===> ', result);
+  // console.log('RESULT ===> ', result1);
   await router.disconnect();
   process.exit(0);
 })();

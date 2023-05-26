@@ -28,15 +28,15 @@ void (async function () {
 
   console.log('exchange', await router.publish({ exchange: 'ptm.retail_render', type: 'fanout' }, { exchange: { durable: true } }, { message: 'I published to exchange!!!' }));
   // await router.disconnect();
-  console.log('===', router._channels.length);
-  await router._chForSend.close();
-  for await (const ch of router._channels) {
-    if ('waitForConfirms' in ch) {
-      await ch.waitForConfirms();
-    }
-    await ch.close();
-  }
-  console.log('===', router._channels.length);
+  // console.log('===', router._channels.length);
+  // await router._chForSend.close();
+  // for await (const { ch } of router._channels) {
+  //   if ('waitForConfirms' in ch) {
+  //     await ch.waitForConfirms();
+  //   }
+  //   await ch.close();
+  // }
+  // console.log('===', router._channels.length);
 
   console.log('Result =', await router.sendToQueue('q_test', { message: 'I send to queue!!!' }, { persistent: true }));
   console.log('exchange', await router.publish({ exchange: 'ptm.retail_render', type: 'fanout' }, { exchange: { durable: true } }, { message: 'I published to exchange!!!' }));

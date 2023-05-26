@@ -8,9 +8,9 @@ import Router from '../../src/Router';
 
   await router.on<{ msg: string }>(
     {
-      exchange: 'ptm.retail_render',
+      exchange: 'order.collected',
       type: 'fanout',
-      queue: 'q_render',
+      queue: 'start_delivery',
     },
     {
       prefetch: 1,

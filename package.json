@@ -30,6 +30,7 @@
   "author": "Mitya Kamaev (dm-kamaev)",
   "license": "ISC",
   "dependencies": {
+    "amqp-connection-manager": "4.1.13",
     "amqplib": "0.10.3",
     "postgres": "3.3.4"
   }

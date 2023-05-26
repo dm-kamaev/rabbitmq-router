@@ -6,13 +6,13 @@ import Router from '../../src/Router';
   await router.connect({ confirm: true });
   const result = await router.publish(
     {
-      exchange: 'ptm.retail_render',
+      exchange: 'order.collected',
       type: 'fanout',
     },
     {
       exchange: { durable: true },
     },
-    { message: 'I published to exchange!!! ' + Date.now() },
+    { message: 'I published fanout exchange ' + Date.now() + '!!!' },
     { persistent: true }
   );
 
