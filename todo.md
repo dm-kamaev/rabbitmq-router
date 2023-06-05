@@ -6,16 +6,17 @@
 * Implement fanout/direct/fanout exchange
 * Implement fake router for test environment
 * Implement reopen connect and channel if they were closed
-  * ~~channel~~
+  * channel
   * connect
+  * heartbeat
 * Example
   * ~~fanout~~
   * ~~dead letter exchange~~
-  * direct
+  * ~~direct~~
   * topic
   * header
 * Manual strategy for ack/noack/reject
-  * ~~exchange~~
+  * exchange
   * queue
 * Support content-type
   * publish

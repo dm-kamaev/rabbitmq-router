@@ -14,9 +14,9 @@ void (async function () {
   await router.connect();
   // console.log('HERE');
 
-  console.log('Result =', await router.sendToQueue('q_test', { message: 'I send to queue!!!' }, { persistent: true }));
+  console.log('Result send to queue =', await router.sendToQueue('q_test', { message: 'I send to queue!!!' }, { persistent: true }));
 
-  console.log('exchange', await router.publish({ exchange: 'ptm.retail_render', type: 'fanout' }, { exchange: { durable: true } }, { message: 'I published to exchange!!!' }));
+  console.log('Result send to exchange', await router.publish({ exchange: 'ptm.retail_render', type: 'fanout' }, { exchange: { durable: true } }, { message: 'I published to exchange!!!' }));
 
-  process.exit(0);
+  // process.exit(0);
 })();

@@ -26,13 +26,16 @@ interface Logger {
 
 type Config = string | amqplib.Options.Connect;
 
+
 export default class Router {
   // constructor(private _logger: I_logger) { }
   private _logger: Logger;
   private _conn: amqplib.Connection;
-  private _state: 'connection' | 'connected' | 'closing' | 'closed' = 'closed';
-  public _channels: Array<{ ch: amqplib.Channel | amqplib.ConfirmChannel; handler?: () => Promise<void> }>;
-  public _chForSend: amqplib.Channel | amqplib.ConfirmChannel;
+  private _state: 'connection' | 'connected' | 'closing' | 'closed' | 'error' = 'closed';
+  private _cbError = (error: any | Error): Promise<void> => {};
+  public _channels: Array<{ ch: amqplib.Channel | amqplib.ConfirmChannel; binding?: () => Promise<void> }>;
+  public _chForSend: amqplib.Channel;
+  public _chForConfirmSend: amqplib.ConfirmChannel;
 
   // eslint-disable-next-line no-use-before-define
   private static instance: Router;
@@ -46,7 +49,8 @@ export default class Router {
     return await router.connect();
   }
 
-  constructor(private _config: Config) {
+  constructor(private _config: Config, private _options: { reconnectTimeSec?: number } = {}) {
+    this._options.reconnectTimeSec ||= 1000;
     this._logger = {
       log: console.log,
       err: console.log,
@@ -57,36 +61,51 @@ export default class Router {
    * @param confirm - this parameter using for create channel of publish (if true then create confirmChannel else default channel)
    */
   async connect({ confirm } = { confirm: false }) {
-    if (this._state === 'connection' || this._state === 'connected') {
-      console.log('ALREADY RECONNECT OR CONNECTED', this._state);
-      return;
-    }
-
     this._state = 'connection';
     this._conn = await amqplib.connect(this._config);
     this._state = 'connected';
 
+    this._conn.on('error', async (error) => {
+      console.log('ON ERROR', error);
+      this._state = 'error';
+      await this._cbError(error);
+    });
+
     this._conn.on('close', async () => {
-      // if (this._state === 'closing') {
-      //   return;
-      // }
+      console.log('ON CLOSE CONNECTION');
+      if (this._state === 'closing') {
+        return;
+      }
       const oldChannels = this._channels;
       this._channels = [];
       this._state = 'closed';
       const idle = setInterval(async () => {
-        console.log('TRY RECONNECT');
-        if (await this.connect({ confirm: Boolean(confirm) })) {
-          console.log('SUCCESS RECONNECT');
-          await this._reopenChannels(oldChannels);
-          console.log('SUCCESS REOPEN');
-          clearInterval(idle);
+        if (this._state === 'connection' || this._state === 'connected') {
+          console.log('ALREADY RECONNECT OR CONNECTED', this._state);
+          return;
         }
-      }, 600);
+        console.log('TRY RECONNECT');
+        // reconnect
+        try {
+          if (await this.connect({ confirm: Boolean(confirm) })) {
+            console.log('SUCCESS RECONNECT');
+            await this._reopenChannels(oldChannels);
+            console.log('SUCCESS REOPEN');
+            clearInterval(idle);
+          }
+        } catch (error) {
+          this._state = 'error';
+          this._logger.err(error);
+        }
+      }, this._options.reconnectTimeSec);
     });
 
     this._channels = [];
-    this._chForSend = await this.createChannel({ confirm: Boolean(confirm) });
+    this._chForSend = await this._getOrCreatePublishChannel({ confirm: false });
+    this._chForConfirmSend = await this._getOrCreatePublishChannel({ confirm: true });
+
     this._channels.push({ ch: this._chForSend });
+    this._channels.push({ ch: this._chForConfirmSend });
     // this._chForSend.on('close', async (...arg) => {
     //   if (this._state === 'closing') {
     //     return;
@@ -100,9 +119,9 @@ export default class Router {
   }
 
   private async _reopenChannels(channels: Router['_channels']) {
-    for await (const { handler } of channels) {
-      if (handler) {
-        await handler();
+    for await (const { binding } of channels) {
+      if (binding) {
+        await binding();
       }
     }
   }
@@ -124,7 +143,10 @@ export default class Router {
     return this._conn;
   }
 
-  async createChannel({ confirm } = { confirm: false }): Promise<amqplib.Channel> {
+  // async createChannel({ confirm }: { confirm: true }): Promise<amqplib.ConfirmChannel>;
+  // async createChannel({ confirm }: { confirm: false }): Promise<amqplib.Channel>;
+  async createChannel<TOptions extends { confirm: boolean }>(options: TOptions): Promise<TOptions['confirm'] extends true ? amqplib.ConfirmChannel : amqplib.Channel>;
+  async createChannel({ confirm } = { confirm: false }) {
     const ch = confirm ? await this._conn.createConfirmChannel() : await this._conn.createChannel();
     // this._channels.push({ ch });
     return ch;
@@ -133,6 +155,23 @@ export default class Router {
   sendToQueue(q: string, data: string | Buffer | Record<any, any>, options?: Options.Publish) {
     const msg = this._serialize(data);
     return this._chForSend.sendToQueue(q, msg, options);
+  }
+
+  async publishConfirm(
+    {
+      exchange,
+      type,
+      routingKey = '',
+    }: {
+      exchange: string;
+      type: 'direct' | 'fanout' | 'topic';
+      routingKey?: string;
+    },
+    { exchange: exchangeOption }: { exchange: Options.AssertExchange },
+    data: string | Buffer | Record<any, any>,
+    options?: amqplib.Options.Publish
+  ) {
+    return await this._publish(this._chForConfirmSend, { exchange, type, routingKey }, { exchange: exchangeOption }, data, options);
   }
 
   async publish(
@@ -149,21 +188,52 @@ export default class Router {
     data: string | Buffer | Record<any, any>,
     options?: amqplib.Options.Publish
   ) {
-    const ch = this._chForSend;
+    return await this._publish(this._chForSend, { exchange, type, routingKey }, { exchange: exchangeOption }, data, options);
+  }
 
+  private async _getOrCreatePublishChannel<TOptions extends { confirm: boolean }>(options: TOptions): Promise<TOptions['confirm'] extends true ? amqplib.ConfirmChannel : amqplib.Channel>;
+  private async _getOrCreatePublishChannel({ confirm } = { confirm: false }): Promise<amqplib.Channel | amqplib.ConfirmChannel> {
+    if (confirm) {
+      if (!this._chForConfirmSend) {
+        this._chForConfirmSend = await this.createChannel({ confirm: true });
+      }
+      return this._chForConfirmSend;
+    } else {
+      if (!this._chForSend) {
+        this._chForSend = await this.createChannel({ confirm: false });
+        // this._chForSend.on('close', async (...arg) => {
+        //   if (this._state === 'closing') {
+        //     return;
+        //   }
+        //   console.log('Close channel chForSend', arg, this._channels.length);
+        //   this._channels = this._channels.filter((el) => el.ch !== this._chForSend);
+        //   this._chForSend = await this.createChannel({ confirm: Boolean(confirm) });
+        //   console.log('Reopen channel chForSend', this._channels.length);
+        // });
+      }
+      return this._chForSend;
+    }
+  }
+
+  private async _publish(
+    ch: amqplib.Channel | amqplib.ConfirmChannel,
+    {
+      exchange,
+      type,
+      routingKey = '',
+    }: {
+      exchange: string;
+      type: 'direct' | 'fanout' | 'topic';
+      routingKey?: string;
+    },
+    { exchange: exchangeOption }: { exchange: Options.AssertExchange },
+    data: string | Buffer | Record<any, any>,
+    options?: amqplib.Options.Publish
+  ) {
     await ch.assertExchange(exchange, type, exchangeOption);
 
     const msg = this._serialize(data);
-    const resultOfPulish = await new Promise((resolve, reject) => {
-      console.log('HERE');
-      ch.publish(exchange, routingKey, msg, options, (err) => {
-        console.log('HERE', err);
-        if (err) {
-          return reject(err);
-        }
-        return resolve(true);
-      });
-    });
+    const resultOfPulish = await ch.publish(exchange, routingKey, msg, options);
     if ('waitForConfirms' in ch) {
       await ch.waitForConfirms();
     }
@@ -192,12 +262,6 @@ export default class Router {
     handler: I_handler<T>
   ) {
     const ch = await this.createChannel({ confirm: Boolean(confirm) });
-    this._channels.push({
-      ch,
-      handler: async () => {
-        await this.onQueue(q, { prefetch, confirm, manualAck, queue: queueOption, consume: consumeOption }, handler);
-      },
-    });
     // ch.on('close', async () => {
     //   if (this._state === 'closing') {
     //     return;
@@ -207,6 +271,12 @@ export default class Router {
     //   await this.onQueue(q, { prefetch, confirm, manualAck, queue: queueOption, consume: consumeOption }, handler);
     //   console.log('Reopen channel onQueue', this._channels.length);
     // });
+    this._channels.push({
+      ch,
+      binding: async () => {
+        await this.onQueue(q, { prefetch, confirm, manualAck, queue: queueOption, consume: consumeOption }, handler);
+      },
+    });
 
     if (prefetch) {
       await ch.prefetch(prefetch);
@@ -269,7 +339,7 @@ export default class Router {
     const ch = await this.createChannel({ confirm: Boolean(confirm) });
     this._channels.push({
       ch,
-      handler: async () => {
+      binding: async () => {
         await this.on({ exchange, type, queue, routingKey }, { prefetch, confirm, manualAck, exchange: exchangeOption, queue: queueOption, consume: consumeOption, args }, handler);
       },
     });
@@ -324,6 +394,10 @@ export default class Router {
       consumeOption
     );
   }
+
+  onError(cbError: Router['_cbError']) {
+    this._cbError = cbError;
+  }
 }
 
 class Context implements IContext {
@@ -333,9 +407,9 @@ class Context implements IContext {
     this.reject = this.reject.bind(this);
   }
 
-  // get headers() {
-  //   return this.msg.properties;
-  // }
+  get properties() {
+    return this.msg.properties;
+  }
 
   ack(allUpTo?: boolean) {
     return this._ch.ack(this.msg, allUpTo);

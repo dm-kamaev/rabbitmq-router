@@ -8,7 +8,7 @@ import Router from '../../src/Router';
 
   await router.on<{ msg: string }>(
     {
-      exchange: 'order.collected.dead_letter',
+      exchange: 'order.confirmed.dead_letter',
       type: 'topic',
       queue: 'start_delivery.dead_letter',
       routingKey: '#',
@@ -24,7 +24,7 @@ import Router from '../../src/Router';
 
   await router.on<{ msg: string }>(
     {
-      exchange: 'order.collected',
+      exchange: 'order.confirmed',
       type: 'fanout',
       queue: 'v2_start_delivery',
     },

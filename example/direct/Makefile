@@ -1,4 +1,4 @@
-routingKey = "order.ev.collected"
+routingKey = "order.ev.confirmed"
 
 # If you want scaling consuming message from direct exchange/queue, you can start another worker with same routing key and queue name. RabbitMQ will be send  message to consumers   (behavior like fanout)
 delivery:

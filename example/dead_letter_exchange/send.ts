@@ -6,7 +6,7 @@ import Router from '../../src/Router';
   await router.connect();
   const result = await router.publish(
     {
-      exchange: 'order.collected',
+      exchange: 'order.confirmed',
       type: 'fanout',
     },
     {

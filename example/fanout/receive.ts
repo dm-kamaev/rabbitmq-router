@@ -8,7 +8,7 @@ import Router from '../../src/Router';
 
   await router.on<{ msg: string }>(
     {
-      exchange: 'order.collected',
+      exchange: 'order.confirmed',
       type: 'fanout',
       queue: 'start_delivery',
     },
